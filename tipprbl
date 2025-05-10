@@ -803,6 +803,150 @@ res resd len  ; Rezervă un șir de `len` elemente de tip `int`
 .end_print:
 
     ; Încheiem programul
+
+
     xor eax, eax                ; Returnează 0
     leave
     ret
+
+
+
+b) [3p] Completați conținutul funcției b(void *f) pentru ca aceasta să realizeze un apel la o funcție cu 2 argumente
+de tip int și valoare de retur de tip char * prin intermediul pointerului f, primit ca parametru. Cei doi parametri
+primiți de f() vor fi valorile globale random1 și random2. Printați rezultatul.
+
+void b(void *f)
+{
+    // Cast pointerul generic la un pointer către o funcție ce primește doi int și întoarce char*
+    char *(*func)(int, int) = (char *(*)(int, int))f;
+
+    // Apelează funcția cu random1 și random2 și printează rezultatul
+    printf("%s\n", func(random1, random2));
+}
+
+
+
+
+d) [3p] Folosind un tool pentru decompilare, aflați cheia pentru ca funcția c() să conducă la afișarea mesajului
+You, dog....
+
+ghidra pe utils.o sau objdump -d utils.o | less
+
+
+c) [2p] Pentru executabilul file, determinați numele tuturor simbolurilor exportate aflate în zona .bss
+readelf -s file | grep '\.bss'
+sau
+nm file | grep ' [Bb] '
+sau
+objdump -t file | grep '\.bss'
+
+
+a) [3p] Fie vectorul de bytes colors ce reține cele 4 culori necesare siteului sub formă RGB, unde grupuri de câte
+3 octeți consecutivi formează o culoare. Pentru că cea mai frumoasă culoare este rozul (identificată prin tuplul
+255, 50, 255), afișați numărul de apariții a acesteia în vectorul colors.
+
+
+section .data
+    colors db 255, 50, 255, 0, 0, 0, 255, 255, 255, 255, 50, 255
+    colors_nr dd 4
+; edi va fi adresa de start a vectorului colors
+    mov esi, colors
+    mov ecx, [colors_nr]     ; numărul de culori
+    xor eax, eax             ; eax = 0, contor pentru rozuri
+
+.loop:
+    cmp byte [esi], 255
+    jne .next
+    cmp byte [esi+1], 50
+    jne .next
+    cmp byte [esi+2], 255
+    jne .next
+
+    inc eax                  ; dacă toate 3 componentele corespund, incrementăm
+
+.next:
+    add esi, 3               ; trecem la următoarea culoare (3 bytes)
+    loop .loop
+
+    push eax
+    push msg
+    call printf
+    add esp, 8
+
+
+b) [4p] Siteul pe care îl vom scrie în assembly are nevoie de un owner. Acesta este un id nenul, preluat din cel
+de-al doilea argument în linie de comandă al programului. Transformați cel de-al doilea argument în linie de
+comandă al programului din string în întreg folosind atoi și afișați-l sub forma My id is: <id>, folosind
+printf. Dacă programul nu este invocat cu mai mult de un argument, afișați folosind printf mesajul Not
+enough arguments.
+; accesează argc de pe stivă (la [ebp + 8])
+    mov eax, [ebp + 8]
+    cmp eax, 2          ; trebuie să fie > 1 (adică cel puțin 2 argumente)
+    jl .not_enough
+
+    ; accesează argv de pe stivă (la [ebp + 12])
+    mov eax, [ebp + 12] ; eax = argv
+    mov eax, [eax + 4]  ; eax = argv[1] (al doilea argument)
+
+    push eax            ; argumentul string pentru atoi
+    call atoi           ; returnează int în eax
+
+    push eax            ; id-ul convertit
+    push print_id
+    call printf
+    add esp, 8
+
+    jmp .done
+
+.not_enough:
+    push not_enough
+    call printf
+    add esp, 4
+
+
+c) [3p] Verificați dacă idul primit ca al doilea argument al programului de la punctul anterior este palindrom. În
+cazul în care este, afișați mesajul My id is palindrome, altfel My id is not palindrome.
+
+; argc = [ebp + 8]
+    mov eax, [ebp + 8]
+    cmp eax, 2
+    jl .not_enough  ; se presupune că ai tratat deja cazul cu prea puține argumente
+
+    ; argv = [ebp + 12]
+    mov eax, [ebp + 12]
+    mov esi, [eax + 4] ; esi = pointer la argv[1] (stringul id)
+
+    ; calculează lungimea șirului
+    mov edi, esi        ; edi = pointer la începutul stringului
+.len_loop:
+    cmp byte [edi], 0
+    je .len_done
+    inc edi
+    jmp .len_loop
+.len_done:
+    dec edi             ; edi = sfârșitul stringului (ultimul caracter nenul)
+
+.check_loop:
+    cmp esi, edi
+    jge .is_palindrome  ; dacă s-au intersectat, e palindrom
+
+    mov al, [esi]
+    mov bl, [edi]
+    cmp al, bl
+    jne .not_palindrome
+
+    inc esi
+    dec edi
+    jmp .check_loop
+
+.is_palindrome:
+    push msg_yes
+    call printf
+    add esp, 4
+    jmp .done
+
+.not_palindrome:
+    push msg_no
+    call printf
+    add esp, 4
+    jmp .done
