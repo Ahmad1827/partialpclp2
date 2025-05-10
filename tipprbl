@@ -397,3 +397,412 @@ print_loop:
 
     leave
     ret
+
+
+AFISARE STRUCT 
+struct stud {
+	char name[256];
+	unsigned char grades[3];
+	float mean;
+};
+void print_addresses(struct stud *stud)
+{
+	printf("stud->name: %p\n", (void *)&(stud->name));
+	printf("stud->grades: %p\n", (void *)&(stud->grades));
+	printf("stud->mean: %p\n", (void *)&(stud->mean));
+}
+void print_stud(struct stud *stud)
+{
+	char *name_ptr = (char *)stud; // stud->name începe la offset 0
+	unsigned char *grades_ptr = (unsigned char *)(name_ptr + 256); // grades după name
+	float *mean_ptr = (float *)(grades_ptr + 3); // mean după grades
+
+	printf("Name: %s\n", name_ptr);
+	printf("Grades: %d %d %d\n", *(grades_ptr), *(grades_ptr + 1), *(grades_ptr + 2));
+	printf("Mean: %f\n", *mean_ptr);
+}
+c) [3p] Completați TODO-urile din cadrul funcției print_vec astfel încât să afișați, folosind funcția print_struct
+de la task-ul b), fiecare element al vectorului primit ca argument
+void print_vec(struct stud *studs, int n)
+{
+	if (n <= 0)
+		return;
+
+	print_stud(studs);               // Afișează primul element
+	print_vec(studs + 1, n - 1);     // Apelează recursiv pentru următorul
+}
+d) [3p] Completați TODO-urile din cadrul funcției toggle_case care transformă șirul primit ca argument astfel:
+caracterele upper-case devin lower-case, iar caracterele lower-case devin upper-case (exemplu, șirul de caractere
+“Ana” va deveni, în urma transformării, șirul de caractere “aNA”). Pentru acest task, este obligatoriu să
+folosiți doar operații binare pentru transformarea caracterelor.
+void toggle_case(char *name)
+{
+    while (*name) {
+        char c = *name;
+
+        // Verificăm dacă e literă (A-Z sau a-z)
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+            *name = c ^ 0x20; // Inversare de caz
+        }
+
+        name++;
+    }
+}
+
+
+
+a) [3p] Completați funcția print_struct_elem astfel încât aceasta să afișeze fiecare element al vectorului grades
+din structura primită ca parametru.
+print_struct_elem:
+	push ebp
+	mov ebp, esp
+
+	mov edx, [ebp + 8]         ; edx = pointer to struct student_t
+
+	mov ebx, [edx + id]        ; student ID
+	PRINTF32 `ID: %d\n\x0`, ebx
+
+	lea ebx, [edx + grades]    ; ebx = address of grades[]
+	PRINTF32 `Grades: \x0`
+
+	xor ecx, ecx               ; ecx = index
+
+print_grades_loop:
+	cmp ecx, 3
+	jge print_grades_done
+
+	movzx eax, word [ebx + ecx*2]  ; load short (2 bytes) grade into eax
+	PRINTF32 `%d \x0`, eax
+
+	inc ecx
+	jmp print_grades_loop
+
+print_grades_done:
+	PRINTF32 `\n\x0`
+
+	xor ebx, ebx
+	mov bx, word [edx + final]
+	PRINTF32 `Final: %d\n\x0`, ebx
+
+	leave
+	ret
+
+
+compute_final:
+	push ebp
+	mov ebp, esp
+
+	; Get parameters
+	mov eax, [ebp + 8]    ; eax = pointer to grades[]
+	mov ecx, [ebp + 12]   ; ecx = length
+
+	xor edx, edx          ; edx = sum = 0
+	xor ebx, ebx          ; ebx = index
+
+.sum_loop:
+	cmp ebx, ecx
+	jge .done_sum
+
+	movzx esi, word [eax + ebx*2] ; load short (grade) into esi
+	add edx, esi
+
+	inc ebx
+	jmp .sum_loop
+
+
+b) [3p] Completați funcția compute_final care primește un vector de valori short și dimensiunea acestuia și calculează cel mai apropiat număr întreg pornind de la media aritmetică a numerelor din vector.
+.done_sum:
+	; Rotunjim media: (sum + len/2) / len
+	mov eax, edx          ; eax = sum
+	add eax, ecx
+	shr ecx, 1            ; ecx = len / 2
+	add eax, ecx          ; sum + len / 2
+	shl ecx, 1            ; readjust ecx to len
+	div ecx               ; eax = (sum + len/2) / len
+
+	; return in eax
+	pop ebp
+	ret
+
+
+
+c) [4p] Completați funcția check_final_grade care primește un vector de elemente de tip struct student_t și
+dimensiunea acestuia și parcurge fiecare element, verificând câmpul final ca să fie cel mai apropiat întreg al
+mediei aritmetice a elementelor din vectorul grades[]. Dacă nota finală nu corespunde, corectați câmpul din
+structură. În rezolvarea acestui task, veți folosi funcțiile print_struct_elem și compute_final.
+check_final_grade:
+	push ebp
+	mov ebp, esp
+
+	mov esi, [ebp + 8]    ; esi = pointer to students array
+	mov ecx, [ebp + 12]   ; ecx = number of students
+	xor ebx, ebx          ; index = 0
+
+.loop_students:
+	cmp ebx, ecx
+	jge .done
+
+	; edi = pointer to current student = esi + ebx * sizeof(student_t)
+	mov edi, esi
+	add edi, ebx
+	shl ebx, 2             ; ebx = ebx * 4
+	add edi, ebx           ; edi = esi + ebx * 4 = esi + ebx * 12
+	shr ebx, 2             ; restore ebx
+
+	; push arguments to compute_final(grades, 3)
+	push 3
+	lea eax, [edi + 4]     ; offset of grades field
+	push eax
+	call compute_final
+	add esp, 8             ; clean arguments
+
+	; eax = correct final grade
+	movzx edx, word [edi + 10] ; edx = current final
+	cmp dx, ax
+	je .no_update
+
+	; update final grade
+	mov [edi + 10], ax
+
+.no_update:
+	; push student ptr
+	push edi
+	call print_struct_elem
+	add esp, 4
+
+	inc ebx
+	jmp .loop_students
+
+.done:
+	pop ebp
+	ret
+
+
+
+[2p] Șirul de octeți raw_data reprezintă o înșiruire de 10 structuri de tip Person. Implementați funcția
+show_raw_persons care afișează vârsta și numele fiecărei persoane din șirul de caractere primit ca argument
+ for (int i = 0; i < 10; i++) {
+        struct Person *p = (struct Person *)(arr + i * sizeof(struct Person));
+        printf("Age: %d, Name: %s\n", p->age, p->name);
+    }
+
+b) [2p] Implementați funcția allocate_persons care alocă un vector de num structuri de tip Person și le inițializează
+cu primele num elemente din șirul de biți raw_data. Întoarceți rezultatul alocarii. Afișați apoi vectorul de
+structuri rezultat prin implementarea funcției show_persons.
+struct Person *allocate_persons(char *arr, int num)
+{
+    struct Person *persons = malloc(num * sizeof(struct Person));
+    if (!persons) {
+        return NULL;
+    }
+
+    for (int i = 0; i < num; i++) {
+        struct Person *src = (struct Person *)(arr + i * sizeof(struct Person));
+        persons[i] = *src;  // copiem întreaga structură
+    }
+
+    return persons;
+}
+void show_persons(struct Person *p, int num)
+{
+    for (int i = 0; i < num; i++) {
+        printf("Age: %d, Name: %s\n", p[i].age, p[i].name);
+    }
+}
+
+
+c) [3p] Implementați funcția sort_persons care ordonează crescător în funcție de numărul de biți setați din vârstă
+pentru persoanele din vectorul alocat la punctul anterior. În caz că numerele de biți setați din vârstă sunt egale,
+sortarea se face după ordinea alfabetică a numelor. Afișați rezultatul folosind funcția show_persons.
+int count_set_bits(int n)
+{
+    int count = 0;
+    while (n) {
+        // Îndepărtează cel mai mic bit setat (1) din numărul n
+        n = n & (n - 1);
+        count++;
+    }
+    return count;
+}
+
+void sort_persons(struct Person *p, int num)
+{
+    for (int i = 0; i < num - 1; i++) {
+        for (int j = i + 1; j < num; j++) {
+            // Comparație bazată pe numărul de biți setați din vârstă
+            int bits_i = count_set_bits(p[i].age);
+            int bits_j = count_set_bits(p[j].age);
+            
+            if (bits_i > bits_j || (bits_i == bits_j && strcmp(p[i].name, p[j].name) > 0)) {
+                // Schimbăm persoanele i și j
+                struct Person temp = p[i];
+                p[i] = p[j];
+                p[j] = temp;
+            }
+        }
+    }
+}
+
+
+d) [3p] Implementați funcția shorten_persons care va scurta toate numele din vectorul de persoane sortat obținut
+mai sus, aplicând următoarea transformare. Pentru toate numele care au strict mai mult de trei litere se păstrează
+prima și ultima literă, iar restul literelor sunt înlocuite de numărul literelor. Numele cu mai puțin de 3 litere nu
+sunt afectate. Afișați noul vector obținut folosind funcția show_persons.
+Spre exemplu, numele “Anais” devine “A5s”, iar numele “Ana” rămâne neschimbat.
+
+
+void shorten_persons(struct Person *p, int num)
+{
+    for (int i = 0; i < num; i++) {
+        char *name = p[i].name;  // obținem numele persoanei curente
+        int len = strlen(name);   // aflăm lungimea numelui
+        
+        if (len > 3) {
+            // Dacă numele are mai mult de 3 caractere, aplicăm scurtarea
+            char shortened_name[16];  // presupunem că numele nu vor depăși 15 caractere (datorită dimensiunii fixed de 16)
+            
+            shortened_name[0] = name[0];  // prima literă
+            int middle_len = len - 2;     // numărul de litere intermediare
+            
+            // Dacă numele are mai mult de 3 litere, punem numărul de litere intermediare
+            sprintf(&shortened_name[1], "%d", middle_len);
+            
+            // Adăugăm ultima literă
+            shortened_name[1 + strlen(&shortened_name[1])] = name[len - 1];
+            shortened_name[2 + strlen(&shortened_name[1])] = '\0';  // terminăm șirul de caractere
+            
+            // Copiem numele scurtat în structura persoanei
+            strcpy(p[i].name, shortened_name);
+        }
+    }
+}
+
+
+
+
+a) [3p] Implementaţi funcţia int is_divisor(unsigned int n, unsigned int i) care întoarce valoarea 1 dacă
+i este un divizor al numărului n şi 0 în rest. Afişaţi rezultatul întors folosind funcţia printf.
+is_divisor:
+    push ebp
+    mov ebp, esp
+
+    ; Parametrii sunt în stiva:
+    ; n - [ebp+8]
+    ; i - [ebp+12]
+
+    mov eax, [ebp+8]    ; Încărcăm n în eax
+    mov ebx, [ebp+12]   ; Încărcăm i în ebx
+    xor edx, edx        ; Setăm edx la 0 (pentru a calcula restul)
+
+    div ebx              ; Împărțim eax la ebx. Rezultatul merge în eax, restul în edx.
+
+    ; Verificăm dacă restul (edx) este 0
+    cmp edx, 0
+    je divisor          ; Dacă restul este 0, înseamnă că i este divizor al lui n
+    xor eax, eax        ; Dacă nu este divizor, setăm eax la 0
+    jmp done
+
+divisor:
+    mov eax, 1          ; Dacă este divizor, setăm eax la 1
+
+done:
+    leave
+    ret
+
+si il afisam folosind printf:
+push dword [k]
+    push dword [N]
+    call is_divisor
+    add esp, 8
+    push eax
+    push int_fmt_newline
+    call printf
+    add esp, 8
+
+
+
+
+[3p] Implementaţi funcţia int count_divisors(unsigned int n) care calculează numărul de divizori ai
+numărului n. Nu vom lua în calcul 1 şi numărul însuşi atunci când numărăm divizorii. Folosiţi funcţia printf
+pentru afişare. Utilizați funcţia is_divisor pentru a număra divizorii.
+count_divisors:
+    push ebp
+    mov ebp, esp
+
+    ; Parametrii:
+    ; n - [ebp+8]
+
+    mov eax, 0           ; Contorul de divizori
+    mov ebx, 2           ; Începem de la 2 (nu considerăm 1)
+    
+count_loop:
+    cmp ebx, [ebp+8]     ; Comparăm i cu n
+    jge done_counting    ; Dacă i >= n, ieșim din buclă
+
+    push ebx             ; Salvăm i pe stivă
+    push [ebp+8]         ; Salvăm n pe stivă
+    call is_divisor      ; Apelăm funcția is_divisor(n, i)
+    add esp, 8           ; Curățăm stiva
+
+    cmp eax, 1           ; Dacă eax este 1 (adică i este divizor)
+    jne not_divisor
+    inc eax              ; Incrementăm contorul de divizori
+
+not_divisor:
+    inc ebx              ; Incrementăm i
+    jmp count_loop       ; Continuăm bucla
+
+done_counting:
+    ; Afișăm rezultatul
+    push eax             ; Salvăm rezultatul pe stivă
+    push int_fmt_newline ; Formatul pentru afișare
+    call printf
+    add esp, 8           ; Curățăm stiva
+
+    leave
+    ret
+
+
+
+
+
+
+
+c) [4p] Rezervaţi memorie în secţiunea .bss pentru un şir de întregi res cu len elemente. Completaţi acest şir
+astfel încât fiecare element va reprezenta numărul de divizori ai elementului de pe poziţia corespunzătoare din
+şirul arr declarat în secţiunea .data. Afişaţi folosind funcția printf elementele şirului de întregi res cu len
+elemente, cu toate elementele pe aceeaşi linie, separate de către un spaţiu.
+
+section .bss
+res resd len  ; Rezervă un șir de `len` elemente de tip `int`
+   mov ecx, 0                  ; Contor pentru indexul array-ului
+.loop_arr:
+    cmp ecx, len                ; Verifică dacă am parcurs toate elementele
+    jge .end_loop
+    mov eax, [arr + ecx*4]      ; Încarcă elementul arr[ecx]
+    push eax                     ; Salvează numărul în stivă
+    call count_divisors         ; Numără divizorii
+    add esp, 4                  ; Curăță stiva
+    mov [res + ecx*4], eax      ; Stochează rezultatul în res[ecx]
+    inc ecx                     ; Trecem la următorul element
+    jmp .loop_arr
+.end_loop:
+
+    ; Afișează rezultatele folosind printf
+    mov ecx, 0                  ; Contor pentru afișarea elementelor
+.loop_print:
+    cmp ecx, len                ; Verifică dacă am afișat toate elementele
+    jge .end_print
+    mov eax, [res + ecx*4]      ; Încarcă elementul res[ecx]
+    push eax                     ; Salvează valoarea în stivă
+    push int_fmt                ; Salvează formatul de afișare
+    call printf                 ; Afișează numărul
+    add esp, 8                  ; Curăță stiva
+    inc ecx                     ; Trecem la următorul element
+    jmp .loop_print
+.end_print:
+
+    ; Încheiem programul
+    xor eax, eax                ; Returnează 0
+    leave
+    ret
