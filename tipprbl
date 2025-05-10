@@ -950,3 +950,29 @@ cazul în care este, afișați mesajul My id is palindrome, altfel My id is not 
     call printf
     add esp, 4
     jmp .done
+
+
+
+a) [2p] Dându-se o variabilă de tip signed short cu valoarea inițială -123, adunați-o cu o altă valoare, pentru ca
+prin underflow, să ajungă la valoarea finală 123.
+
+void a() {
+    signed short x = -123;
+    x += 246; // 123 = -123 + 246 (signed short wraparound)
+    printf("a) %d\n", x); // Output: 123
+}
+
+b) [3p] Fiind dat un pointer p, ce a fost referențiat de multiple ori, dereferențiați-l până ajuge să conțină string-ul
+STOP. Afișați numărul total al dereferențierilor.
+int def_count(char **p) {
+    int count = 0;
+    while (strcmp(*p, "STOP") != 0) {
+        p = (char **)*p; // reinterpretăm conținutul ca adresă
+        count++;
+    }
+    return count;
+}
+d) [3p] Pentru ierarhia conținută în directorul my-hierarchy, determinați numele tuturor simbolurilor neexportate
+aflate în zona .bss
+cd my-hierarchy
+find . -type f -exec nm -S --defined-only {} \; | grep '\.bss' | grep -v ' [TDRW] '
