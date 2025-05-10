@@ -1,0 +1,399 @@
+push ebp
+	mov ebp, esp
+
+
+Folosește un for și putchar() pentru a afișa fiecare caracter manual, fără să te bazezi pe \0:
+
+#include <stdio.h>
+#include <stdlib.h>
+
+char *get_magic();
+
+int main() {
+	char *message = get_magic();
+	
+	// Știm că sunt 66 de octeți de afișat
+	for (int i = 0; i < 66; i++) {
+		putchar(message[i]);
+	}
+	putchar('\n');
+
+	return 0;
+}
+AFISAM  TOT SIRUL INDIFERENT DE \0
+
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+
+char decode_me[] = {-90, -112, -118, -33, -103, -112, -112, -109};
+
+int main() {
+    unsigned char *message = malloc(9 * sizeof(*message));
+    if (!message) return 1;
+
+    for (int i = 0; i < 8; i++) {
+        message[i] = ~decode_me[i];
+    }
+    message[8] = '\0';  // asigurăm terminatorul de șir
+
+    printf("%s\n", message);	
+
+    free(message);
+    return 0;
+}
+DAM ~ LA FIECARE ELEM  DIN SIR.
+
+
+Pentru a afla ce bibliotecă C standard este folosită, folosește comanda:
+ldd crackme
+
+
+Mută definiția lui message din .rodata într-o secțiune scrisă, cum ar fi .data:
+section .data
+	message db 'Starting machine...', 0, 0
+
+section .rodata
+	fmt db '%s', 0
+DACA AVEM SEG FAULT POATE ESTE CA MODIFICAM O VAR DIN .RODATA DECI TRB SA O MUTAM IN .DATA
+
+
+section .data
+	; WARNING! You must not define any new global variables.
+	attack_location db "Ardhalis", 0
+	read_fmt db "%d%d", 0
+
+section .text
+extern broadcast
+extern scanf
+global main
+
+main:
+	push ebp
+	mov ebp, esp
+
+	sub esp, 12              ; alocăm 12 bytes pentru structura info (3x4 bytes)
+
+	lea eax, [esp]           ; eax -> struct info
+	push eax
+	push read_fmt
+	call scanf
+	add esp, 8               ; curățăm parametrii
+
+	mov eax, [esp]           ; eax = month (în locul esp[0])
+	mov [esp], eax           ; redundant dar explicit
+
+	mov eax, [esp + 4]       ; eax = day
+	mov [esp + 4], eax       ; redundant dar explicit
+
+	mov dword [esp + 8], attack_location ; setăm pointerul location
+
+	lea eax, [esp]           ; eax -> struct info
+	push eax
+	call broadcast
+	add esp, 4               ; curățăm parametru
+
+	leave
+	ret
+
+implementare INT FILTER (INT *SRC_ARRAY, INT SRC_ARRAY_LEN, INT *DEST_ARRAY)
+section .text
+global filter
+extern printf
+
+; int filter(int *src_array, int src_array_len, int *dest_array)
+filter:
+    push ebp
+    mov ebp, esp
+
+    mov esi, [ebp + 8]   ; esi = src_array
+    mov ecx, [ebp + 12]  ; ecx = src_array_len
+    mov edi, [ebp + 16]  ; edi = dest_array
+
+    xor eax, eax         ; eax = counter for elements copied
+
+.next:
+    cmp ecx, 0
+    je .done
+
+    mov edx, [esi]       ; edx = *src_array
+    mov ebx, edx
+    mov ecx, 42
+    xor edx, edx
+    div ecx              ; eax = ebx / 42, edx = ebx % 42
+
+    test edx, edx        ; dacă restul == 0, e divizibil
+    jnz .skip
+
+    mov [edi], ebx       ; salvează valoarea în dest_array
+    add edi, 4           ; mergi la următorul element
+    inc eax              ; crește numărul de elemente copiate
+
+.skip:
+    add esi, 4           ; următorul element din src_array
+    mov ecx, [ebp + 12]
+    sub ecx, eax
+    jmp .next
+
+.done:
+    pop ebp
+    ret
+
+SI ASA O APELAM (FILTER E TOT IN ACELASI FISIER, DEASUPRA MAINULUI)
+
+section .data
+	magic_number equ 42
+	
+	; WARNING! You may not use these values directly in filter!
+	raw_password dd 43, 6, 10, 4242, 82, 982, 165, 424242, 12, 8484, 4242424242, 42
+	raw_password_len equ 12
+	final_password times 12 dd 0
+	print_fmt db "%d ", 0
+
+section .text
+extern printf
+extern filter
+global main
+
+main:
+	push ebp
+	mov ebp, esp
+
+	; Apelăm: filter(raw_password, raw_password_len, final_password)
+	push final_password
+	push raw_password_len
+	push raw_password
+	call filter
+	add esp, 12              ; curățăm stiva
+
+	mov ecx, eax             ; eax conține numărul de elemente copiate
+
+	mov esi, final_password ; pointer în vectorul filtrat
+
+.loop:
+	cmp ecx, 0
+	je .done
+
+	push dword [esi]       ; valoare de afișat
+	push print_fmt
+	call printf
+	add esp, 8
+
+	add esi, 4
+	dec ecx
+	jmp .loop
+
+.done:
+	leave
+	ret
+
+
+
+CUM INTERSCHIMBAM ELEM DIN STRUCT PT MINIMIZAREA DIMENSIUNII
+STRUCT ORIGINAL
+struct s{
+	char a;     // 1 byte
+	int b;      // 4 bytes
+	char c[5];  // 5 bytes
+	int d;      // 4 bytes
+	short e;    // 2 bytes
+	char f;     // 1 byte
+	short g;    // 2 bytes
+	char h;     // 1 byte
+};
+SI DUPA
+struct s {
+	int b;
+	int d;
+	short e;
+	short g;
+	char a;
+	char f;
+	char h;
+	char c[5];
+};
+VERIFICAM PUNAND IN MAIN 
+printf("Size of struct s: %u\n", (unsigned)sizeof(struct s));
+SI RULAND SCRIPTUL (GCC... A.OUT)
+
+b) [1p] Declarați o variabilă numită my_var în fișierul file.c, care să fie alocată în secțiunea .rodata și simbolul
+său să fie neexportat.
+static const char my_var[] = "Hello from .rodata!";
+VERIFICARE:
+gcc -o check_rodata file.c
+objdump -h check_rodata
+
+Pentru a căuta simbolul my_var și a verifica că este neexportat (adică simbolul nu apare în tabela de simboluri externe), folosește:
+nm -C --defined-only check_rodata | grep my_var
+
+readelf -S check_rodata | grep .rodata
+readelf -s check_rodata | grep my_var
+
+
+
+d) [3p] Completați funcția void solve(struct text letter) din fișierul all_pointers.c pentru a repara eroarea
+de la rulare astfel încât să se afișeze conținutul textului din letter după aplicarea funcției number_lines.
+• secvența de apeluri number_lines și print_text trebuie să rămână neschimbată!
+DECI ERORILE DE RULARE  POT FI  DIN CAUZA CA N AM DAT MALLOC
+
+  // Alocăm memorie pentru fiecare linie pentru a putea modifica textul
+    for (int i = 0; i < letter.line_count; i++) {
+        // Alocăm suficient spațiu pentru numărul liniei + textul original
+        size_t len = strlen(letter.lines[i]) + 10;  // +10 pentru a adăuga numărul liniei
+        letter.lines[i] = (char *)malloc(len * sizeof(char));
+
+        // Dacă alocarea a eșuat, ieșim din funcție
+        if (letter.lines[i] == NULL) {
+            printf("Memory allocation failed!\n");
+            return;
+        }
+    }
+
+
+SCHIMBAM LITERELE MICI DUPA FORMULA  str[i] = '0' + str[i] % 8.
+transform_string:
+    push ebp
+    mov ebp, esp
+
+    ; Inițializăm indexul i = 0
+    xor ecx, ecx          ; ecx va fi folosit ca index i (ecx = 0)
+
+.loop:
+    ; Verificăm dacă am ajuns la finalul șirului (terminatorul null '\0')
+    mov al, byte [eax + ecx]   ; al = str[i]
+    test al, al                ; Verificăm dacă al este '\0'
+    jz .done                    ; Dacă da, ieșim din buclă
+
+    ; Verificăm dacă caracterul este literă mică
+    cmp al, 'a'                ; Verificăm dacă al >= 'a'
+    jl .next                    ; Dacă al < 'a', trecem la următorul caracter
+    cmp al, 'z'                ; Verificăm dacă al <= 'z'
+    jg .next                    ; Dacă al > 'z', trecem la următorul caracter
+
+    ; Transformăm litera mică în cifra corespunzătoare
+    sub al, 'a'                ; al = str[i] - 'a' (valoare între 0 și 25)
+    mov bl, al                 ; bl = str[i] - 'a'
+    and bl, 7                  ; bl = (str[i] - 'a') % 8
+    add bl, '0'                ; bl = '0' + (str[i] - 'a') % 8
+    mov byte [eax + ecx], bl   ; Înlocuim caracterul original cu cifra
+
+.next:
+    inc ecx                    ; Incrementăm indexul i
+    jmp .loop                   ; Continuăm bucla
+
+.done:
+    leave
+    ret
+SI FOLOSIM TRANSFORM_STRING CU VARIABILA QUESTION
+ lea eax, [question]
+  call transform_string
+
+
+
+b) [4p] Scrieți o funcție cu semnătura void apply_digit_sum(int *arr, int size) care va aplica funcția externă void sum_digits(int *n) pe fiecare element al vectorului arr.
+• spre exemplu, pentru array-ul {123, 456, 789, 101112, 131415} se va aplica funcția sum_digits pe fiecare
+element, rezultând array-ul {6, 15, 24, 6, 15}
+
+apply_digit_sum:
+    push ebp
+    mov ebp, esp
+
+    ; Parametru 1: adresa lui arr
+    ; Parametru 2: dimensiunea array-ului (size)
+    
+    ; Incepem cu indexul 0
+    xor ecx, ecx            ; ecx va fi indexul (0)
+
+.loop:
+    ; Verificăm dacă am ajuns la sfârșitul array-ului
+    cmp ecx, [ebp + 8]      ; Comparăm indexul cu dimensiunea array-ului (size)
+    jge .done                ; Dacă ecx >= size, ieșim din buclă
+
+    ; Apelăm sum_digits pe arr[ecx]
+    lea eax, [ebp + 12]      ; Adresa lui arr[0]
+    add eax, ecx             ; Ne mutăm la elementul curent arr[ecx]
+    push eax                 ; Stocăm adresa elementului în stivă
+    call sum_digits          ; Apelăm funcția sum_digits
+    add esp, 4               ; Curățăm stiva după apel
+
+    inc ecx                  ; Incrementăm indexul
+    jmp .loop                ; Continuăm bucla
+
+.done:
+    leave
+    ret
+
+; Apelăm funcția apply_digit_sum
+     lea eax, [arr]             ; Obținem adresa primului element din arr
+    push arr_len              ; Adăugăm dimensiunea array-ului pe stivă
+    call apply_digit_sum 
+
+UN EXEMPLU DE A AFISA CU PRINTF
+extern printf
+
+main:
+    push ebp
+    mov ebp, esp
+
+    ; Apelăm funcția apply_digit_sum folosind array-ul `arr` și dimensiunea `arr_len`
+    lea eax, [arr]             ; Obținem adresa primului element din arr
+    push arr_len              ; Adăugăm dimensiunea array-ului pe stivă
+    call apply_digit_sum      ; Apelăm apply_digit_sum pentru a procesa fiecare element
+
+    ; Afișăm rezultatele array-ului modificat
+    mov ecx, arr_len          ; Setăm numărul de elemente (dimensiunea array-ului)
+    lea ebx, [arr]            ; Adresa primului element din array
+
+print_loop:
+    mov eax, [ebx]            ; Înregistrăm valoarea curentă în eax
+    push eax                  ; Punem valoarea pe stivă
+    push int_fmt              ; Punem formatul pentru printf pe stivă
+    call printf               ; Apelăm printf pentru a afișa valoarea
+    add esp, 8                ; Curățăm stiva (2 elemente: eax și formatul)
+
+    add ebx, 4                ; Trecem la următorul element din array
+    loop print_loop           ; Repetăm pentru toate elementele din array
+
+    leave
+    ret
+
+
+c) [3p] Alocați pe stivă array-ul {45, 64, 911, 1234, 52344} și aplicați funcția apply_digit_sum pe el. Afișați
+array-ul rezultat folosind funcția printf.
+
+ ; Alocăm un array de 5 int-uri pe stivă
+    sub esp, 20  ; Alocăm 20 de octeți pentru 5 int-uri (5 * 4 = 20 octeți)
+
+    ; Inițializăm array-ul
+    mov dword [esp], 45       ; array[0] = 45
+    mov dword [esp + 4], 64   ; array[1] = 64
+    mov dword [esp + 8], 911  ; array[2] = 911
+    mov dword [esp + 12], 1234; array[3] = 1234
+    mov dword [esp + 16], 52344; array[4] = 52344
+
+    ; Apelăm funcția apply_digit_sum pentru array-ul de 5 elemente
+    lea eax, [esp]            ; Obținem adresa primului element al array-ului
+    push 5                    ; Dimensiunea array-ului (5 elemente)
+    call apply_digit_sum      ; Apelăm apply_digit_sum
+
+    ; Afișăm rezultatele array-ului modificat
+    mov ecx, 5                ; Setăm numărul de elemente (dimensiunea array-ului)
+    lea ebx, [esp]            ; Adresa primului element din array
+
+print_loop:
+    mov eax, [ebx]            ; Înregistrăm valoarea curentă în eax
+    push eax                  ; Punem valoarea pe stivă
+    push int_fmt              ; Punem formatul pentru printf pe stivă
+    call printf               ; Apelăm printf pentru a afișa valoarea
+    add esp, 8                ; Curățăm stiva (2 elemente: eax și formatul)
+
+    add ebx, 4                ; Trecem la următorul element din array
+    loop print_loop           ; Repetăm pentru toate elementele din array
+
+    ; Curățăm stiva alocată pentru array
+    add esp, 20
+
+    leave
+    ret
